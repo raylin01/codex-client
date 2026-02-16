@@ -1,5 +1,3 @@
-/// <reference types="node" />
-/// <reference types="node" />
 import { EventEmitter } from 'events';
 import { ThreadStartParams, ThreadStartResponse, ThreadResumeParams, ThreadResumeResponse, ThreadForkParams, ThreadForkResponse, ThreadArchiveParams, ThreadArchiveResponse, ThreadUnarchiveParams, ThreadUnarchiveResponse, ThreadSetNameParams, ThreadSetNameResponse, ThreadCompactStartParams, ThreadCompactStartResponse, ThreadRollbackParams, ThreadRollbackResponse, ThreadListParams, ThreadListResponse, ThreadLoadedListParams, ThreadLoadedListResponse, ThreadReadParams, ThreadReadResponse, ModelListParams, ModelListResponse, SetDefaultModelParams, SetDefaultModelResponse, AppsListParams, AppsListResponse, SkillsListParams, SkillsListResponse, SkillsRemoteReadParams, SkillsRemoteReadResponse, SkillsRemoteWriteParams, SkillsRemoteWriteResponse, SkillsConfigWriteParams, SkillsConfigWriteResponse, ConfigReadParams, ConfigReadResponse, ConfigValueWriteParams, ConfigBatchWriteParams, ConfigRequirements, TurnStartParams, TurnStartResponse, TurnInterruptParams, TurnInterruptResponse } from './types.js';
 export interface CodexClientOptions {
