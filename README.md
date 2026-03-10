@@ -67,6 +67,35 @@ if (request?.kind === 'question') {
 }
 ```
 
+### Session Browser Examples
+
+Codex thread history is available through the read-only helpers in the `sessions` subpath.
+
+```ts
+import { CodexClient } from '@raylin01/codex-client';
+import {
+  listCodexSessionSummaries,
+  readCodexSessionRecord
+} from '@raylin01/codex-client/sessions';
+
+const client = new CodexClient({ cwd: process.cwd() });
+await client.start();
+
+const summaries = await listCodexSessionSummaries(client, { limit: 10 });
+const latest = summaries[0];
+
+if (latest) {
+  const record = await readCodexSessionRecord(client, latest.id);
+  console.log('Thread:', record.summary.id);
+  console.log('Transcript blocks:', record.transcript.length);
+  console.log('Raw messages:', record.rawMessages.length);
+}
+
+await client.shutdown();
+```
+
+`record.transcript` normalizes prior Codex history, while `record.rawSession` and `record.rawMessages` keep the original thread data.
+
 ## Raw Transport API
 
 If you need direct JSON-RPC control, the original `new CodexClient(...)` API is unchanged.

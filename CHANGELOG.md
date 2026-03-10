@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Added shared provider-neutral session browser types for raw plus normalized transcript access.
+- Added a new read-only `./sessions` entrypoint with `listCodexSessionSummaries(...)` and `readCodexSessionRecord(...)`.
+- Added normalized Codex thread extraction for user input, assistant output, reasoning, plans, command execution, file changes, and MCP calls.
+- Added session browser tests for the new thread browsing surface.
+
 ## 0.2.1
 
 - Added `createQuestionSession(...)` to the structured client for incremental multi-question workflows.

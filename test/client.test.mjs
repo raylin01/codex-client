@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 
-import { CodexClient, StructuredCodexClient } from '../dist/esm/index.js';
+import {
+  CodexClient,
+  StructuredCodexClient,
+  listCodexSessionSummaries,
+  readCodexSessionRecord
+} from '../dist/esm/index.js';
 
 class FakeCodexRawClient extends EventEmitter {
   constructor() {
@@ -330,4 +335,42 @@ test('structured client maps exec policy amendments without fake always scope', 
       }
     }
   });
+});
+
+test('session browser lists and reads Codex threads', async () => {
+  const thread = {
+    id: 'thread-1',
+    preview: 'Inspect project',
+    cwd: '/repo',
+    createdAt: 1704067200,
+    updatedAt: 1704067260,
+    gitInfo: { branch: 'main' },
+    turns: [
+      {
+        id: 'turn-1',
+        input: [{ type: 'text', text: 'Inspect project' }],
+        items: [
+          { item: { id: 'assistant-1', type: 'agentMessage', text: 'Project inspected' } }
+        ]
+      }
+    ]
+  };
+
+  const browserClient = {
+    async listThreads() {
+      return { data: [thread], nextCursor: null };
+    },
+    async readThread() {
+      return { thread };
+    }
+  };
+
+  const summaries = await listCodexSessionSummaries(browserClient);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].provider, 'codex');
+
+  const record = await readCodexSessionRecord(browserClient, 'thread-1');
+  assert.equal(record?.provider, 'codex');
+  assert.equal(record?.rawMessages.length, 1);
+  assert.equal(record?.messages.some((message) => message.role === 'assistant'), true);
 });

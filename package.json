@@ -1,6 +1,6 @@
 {
   "name": "@raylin01/codex-client",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Node.js client for controlling Codex CLI app-server over JSON-RPC.",
   "license": "ISC",
   "author": "Ray Lin",
@@ -13,6 +13,11 @@
       "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./sessions": {
+      "types": "./dist/types/sessions.d.ts",
+      "import": "./dist/esm/sessions.js",
+      "require": "./dist/cjs/sessions.js"
     }
   },
   "files": [

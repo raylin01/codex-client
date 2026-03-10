@@ -17,3 +17,4 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./types.js"), exports);
 __exportStar(require("./client.js"), exports);
 __exportStar(require("./structured.js"), exports);
+__exportStar(require("./sessions.js"), exports);
