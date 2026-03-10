@@ -1,6 +1,6 @@
 # @raylin01/codex-client
 
-Node.js client for controlling Codex CLI app-server over JSON-RPC.
+Node.js client for controlling Codex CLI app-server over JSON-RPC, with both the raw transport API and a structured thread/turn wrapper.
 
 ## Install
 
@@ -18,19 +18,38 @@ npm install @raylin01/codex-client
 ```ts
 import { CodexClient } from '@raylin01/codex-client';
 
-const client = new CodexClient({ cwd: process.cwd() });
-
-client.on('ready', () => console.log('Codex app-server ready'));
-client.on('notification', (notification) => {
-  console.log('Notification:', notification.method);
+const client = await CodexClient.init({
+  cwd: process.cwd(),
+  approvalPolicy: 'on-request'
 });
 
-await client.start();
-const threads = await client.listThreads();
-console.log('threads', threads.data?.length ?? 0);
+const turn = client.send('Summarize this repository and mention the riskiest area.');
 
-await client.shutdown();
+for await (const update of turn.updates()) {
+  if (update.kind === 'output' && update.snapshot.currentOutputKind === 'text') {
+    process.stdout.write(update.snapshot.text);
+  }
+
+  if (update.kind === 'request') {
+    console.log('\nRequest:', update.snapshot.currentMessage.content);
+  }
+}
+
+await turn.done;
+await client.close();
 ```
+
+## Structured API
+
+- `CodexClient.init(options)` starts the app-server and initializes or resumes a thread
+- `client.send(input, options?)` returns a turn handle immediately
+- `turn.current()`, `turn.history()`, `turn.updates()`, and `turn.done` expose normalized turn state
+- `client.getOpenRequests()` returns pending approvals, questions, and tool calls
+- `client.approveRequest(...)`, `client.answerQuestion(...)`, and `client.respondToToolCall(...)` respond to Codex RPC requests without handling raw JSON-RPC directly
+
+## Raw Transport API
+
+If you need direct JSON-RPC control, the original `new CodexClient(...)` API is unchanged.
 
 ## Event Model
 
@@ -47,6 +66,12 @@ await client.shutdown();
 - `cwd`, `codexPath`, `args`, `env`
 - `analyticsDefaultEnabled`
 - `clientInfo` and `capabilities`
+
+### `await CodexClient.init(options)`
+
+- returns a `StructuredCodexClient`
+- accepts thread bootstrap options like `resumeThreadId`, `forkThread`, `approvalPolicy`, `sandbox`, and instructions
+- keeps the raw client available at `client.raw`
 
 ### Core methods
 

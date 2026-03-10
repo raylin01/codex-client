@@ -82,6 +82,11 @@ export class CodexClient extends EventEmitter {
     this.options = options;
   }
 
+  static async init(config: import('./structured.js').StructuredCodexClientOptions) {
+    const module = await import('./structured.js');
+    return module.StructuredCodexClient.init(config);
+  }
+
   async start(): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = this.startInternal();

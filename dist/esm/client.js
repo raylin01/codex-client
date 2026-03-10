@@ -13,6 +13,10 @@ export class CodexClient extends EventEmitter {
         super();
         this.options = options;
     }
+    static async init(config) {
+        const module = await import('./structured.js');
+        return module.StructuredCodexClient.init(config);
+    }
     async start() {
         if (this.initPromise)
             return this.initPromise;

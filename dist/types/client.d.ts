@@ -24,6 +24,7 @@ export declare class CodexClient extends EventEmitter {
     private pending;
     private readonly options;
     constructor(options?: CodexClientOptions);
+    static init(config: import('./structured.js').StructuredCodexClientOptions): Promise<import("./structured.js").StructuredCodexClient>;
     start(): Promise<void>;
     private startInternal;
     private handleLine;
