@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Added synthetic attached-turn handling so structured Codex clients can answer approvals and questions on resumed waiting turns.
+- Added regression coverage for answering provider-originated question requests without a locally started turn.
+
 ## 0.2.2
 
 - Added shared provider-neutral session browser types for raw plus normalized transcript access.

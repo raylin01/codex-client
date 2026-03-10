@@ -295,6 +295,45 @@ test('structured client supports incremental codex question sessions', async () 
   });
 });
 
+test('structured client can attach to an existing waiting turn and answer questions', async () => {
+  const raw = new FakeCodexRawClient();
+  const client = StructuredCodexClient.fromRawClient(raw, 'thread-1');
+
+  raw.emit('request', {
+    id: 12,
+    method: 'item/tool/requestUserInput',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'remote-existing',
+      itemId: 'ask-existing',
+      questions: [
+        {
+          id: 'q1',
+          header: 'Takeover',
+          question: 'Choose one',
+          isOther: false,
+          isSecret: false,
+          options: [{ label: 'A', description: 'first' }]
+        }
+      ]
+    }
+  });
+
+  const [question] = client.getOpenRequests();
+  assert.equal(question.kind, 'question');
+  assert.equal(raw.errors.length, 0);
+
+  await client.answerQuestion(question.id, 'A');
+  assert.deepEqual(raw.responses[0], {
+    id: 12,
+    result: {
+      answers: {
+        q1: { answers: ['A'] }
+      }
+    }
+  });
+});
+
 test('structured client maps exec policy amendments without fake always scope', async () => {
   const raw = new FakeCodexRawClient();
   const client = StructuredCodexClient.fromRawClient(raw, 'thread-1');

@@ -728,9 +728,18 @@ export class StructuredCodexClient extends EventEmitter {
         const turn = this.turnsByProviderId.get(request.turnId);
         turn?.resolveRequest(requestId);
     }
-    turnFromRemote(turnId) {
+    turnFromRemote(turnId, createIfMissing = false) {
         if (turnId && this.turnsByProviderId.has(turnId)) {
             return this.turnsByProviderId.get(turnId);
+        }
+        if (!this.activeTurn && createIfMissing && this.threadId && turnId) {
+            const handle = new CodexTurnHandle(`attached-${++this.turnCounter}`, this.threadId, '', { resumed: true, synthetic: true });
+            handle.setProviderTurnId(turnId);
+            handle.markStarted();
+            this.turns.push(handle);
+            this.turnsByProviderId.set(turnId, handle);
+            this.activeTurn = handle;
+            return handle;
         }
         return this.activeTurn;
     }
@@ -753,7 +762,7 @@ export class StructuredCodexClient extends EventEmitter {
         if (this.threadId && notificationThreadId && notificationThreadId !== this.threadId) {
             return;
         }
-        const turn = this.turnFromRemote(params.turnId || params.turn?.id);
+        const turn = this.turnFromRemote(params.turnId || params.turn?.id, true);
         switch (notification.method) {
             case 'turn/started':
                 if (turn && params.turn?.id) {
@@ -837,7 +846,7 @@ export class StructuredCodexClient extends EventEmitter {
         if (this.threadId && requestThreadId && requestThreadId !== this.threadId) {
             return;
         }
-        const turn = this.turnFromRemote(params.turnId);
+        const turn = this.turnFromRemote(params.turnId, true);
         if (!turn) {
             this.rawClient.sendError(request.id, { message: 'Unknown turn' });
             return;
