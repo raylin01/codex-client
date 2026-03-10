@@ -194,10 +194,19 @@ export interface CodexTurnUpdate {
   kind: 'queued' | 'started' | 'output' | 'tool_use' | 'tool_result' | 'request' | 'completed' | 'error';
 }
 
+export type CodexApprovalScope = 'once' | 'session';
+
 export interface CodexApprovalDecision {
   behavior: 'allow' | 'deny';
-  scope?: 'once' | 'session' | 'always';
+  scope?: CodexApprovalScope;
   execPolicyAmendment?: string[] | null;
+}
+
+export interface CodexQuestionSessionSnapshot {
+  requestId: string;
+  request: CodexQuestionRequest;
+  currentIndex: number;
+  answers: Record<string, string | string[]>;
 }
 
 function nowIso(): string {
@@ -274,6 +283,112 @@ function cloneTurnResult(result: CodexTurnResult): CodexTurnResult {
     error: result.error ? { ...result.error } : undefined,
     remoteTurn: result.remoteTurn ? { ...result.remoteTurn } : undefined
   };
+}
+
+function getQuestionLookupKeys(question: CodexQuestionPrompt): string[] {
+  const keys = [question.id, question.header, question.question].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0
+  );
+  return Array.from(new Set(keys));
+}
+
+function resolveQuestionPrompt(
+  questions: CodexQuestionPrompt[],
+  questionKey: string | number
+): { index: number; question: CodexQuestionPrompt } {
+  if (typeof questionKey === 'number') {
+    const question = questions[questionKey];
+    if (!question) {
+      throw new Error(`Unknown question index: ${questionKey}`);
+    }
+    return { index: questionKey, question };
+  }
+
+  const index = questions.findIndex((question) => getQuestionLookupKeys(question).includes(questionKey));
+  if (index < 0) {
+    throw new Error(`Unknown question: ${questionKey}`);
+  }
+
+  return { index, question: questions[index] };
+}
+
+export class CodexQuestionSession {
+  private readonly request: CodexQuestionRequest;
+  private readonly answers = new Map<string, string | string[]>();
+  private currentIndex = 0;
+
+  constructor(private readonly client: StructuredCodexClient, request: CodexQuestionRequest) {
+    this.request = cloneOpenRequest(request) as CodexQuestionRequest;
+  }
+
+  get requestId(): string {
+    return this.request.id;
+  }
+
+  current(): CodexQuestionSessionSnapshot {
+    return {
+      requestId: this.request.id,
+      request: cloneOpenRequest(this.request) as CodexQuestionRequest,
+      currentIndex: this.currentIndex,
+      answers: this.getAnswers()
+    };
+  }
+
+  getCurrentQuestion(): CodexQuestionPrompt | null {
+    const question = this.request.questions[this.currentIndex];
+    if (!question) {
+      return null;
+    }
+
+    return {
+      ...question,
+      options: question.options.map((option) => ({ ...option }))
+    };
+  }
+
+  getAnswers(): Record<string, string | string[]> {
+    const values: Record<string, string | string[]> = {};
+    for (const question of this.request.questions) {
+      const answer = this.answers.get(question.id);
+      if (answer !== undefined) {
+        values[question.id] = Array.isArray(answer) ? [...answer] : answer;
+      }
+    }
+    return values;
+  }
+
+  setAnswer(questionKey: string | number, answer: string | string[]): this {
+    const { question } = resolveQuestionPrompt(this.request.questions, questionKey);
+    this.answers.set(question.id, Array.isArray(answer) ? [...answer] : answer);
+    return this;
+  }
+
+  setCurrentAnswer(answer: string | string[]): this {
+    const question = this.getCurrentQuestion();
+    if (!question) {
+      throw new Error('No current question available.');
+    }
+
+    return this.setAnswer(question.id, answer);
+  }
+
+  next(): CodexQuestionPrompt | null {
+    if (this.currentIndex < this.request.questions.length - 1) {
+      this.currentIndex += 1;
+    }
+    return this.getCurrentQuestion();
+  }
+
+  previous(): CodexQuestionPrompt | null {
+    if (this.currentIndex > 0) {
+      this.currentIndex -= 1;
+    }
+    return this.getCurrentQuestion();
+  }
+
+  async submit(): Promise<void> {
+    await this.client.answerQuestion(this.request.id, this.getAnswers());
+  }
 }
 
 function cloneHistoryEntry(entry: CodexTurnHistoryEntry): CodexTurnHistoryEntry {
@@ -727,6 +842,20 @@ export class StructuredCodexClient extends EventEmitter {
     return this.activeTurn?.current().openRequests ?? [];
   }
 
+  getOpenRequest(requestId: string): CodexOpenRequest | null {
+    const request = this.requestsById.get(requestId);
+    return request ? cloneOpenRequest(request) : null;
+  }
+
+  createQuestionSession(requestId: string): CodexQuestionSession {
+    const request = this.requestsById.get(requestId);
+    if (!request || request.kind !== 'question') {
+      throw new Error(`Unknown question request: ${requestId}`);
+    }
+
+    return new CodexQuestionSession(this, request);
+  }
+
   async approveRequest(requestId: string, decision: CodexApprovalDecision = { behavior: 'allow' }): Promise<void> {
     const request = this.requestsById.get(requestId);
     if (!request) {
@@ -1163,15 +1292,16 @@ function mapCommandApprovalDecision(
     return 'decline';
   }
 
-  if (decision.scope === 'always') {
-    const amendment = decision.execPolicyAmendment ?? suggestedAmendment ?? null;
-    if (amendment && amendment.length > 0) {
-      return { acceptWithExecpolicyAmendment: { execpolicy_amendment: amendment } };
+  if (decision.scope === 'session') {
+    if (decision.execPolicyAmendment && decision.execPolicyAmendment.length > 0) {
+      throw new Error('execPolicyAmendment cannot be combined with session-scoped Codex approvals.');
     }
+    return 'acceptForSession';
   }
 
-  if (decision.scope === 'session') {
-    return 'acceptForSession';
+  const amendment = decision.execPolicyAmendment ?? suggestedAmendment ?? null;
+  if (amendment && amendment.length > 0) {
+    return { acceptWithExecpolicyAmendment: { execpolicy_amendment: amendment } };
   }
 
   return 'accept';
@@ -1182,7 +1312,11 @@ function mapFileApprovalDecision(decision: CodexApprovalDecision): FileChangeApp
     return 'decline';
   }
 
-  if (decision.scope === 'session' || decision.scope === 'always') {
+  if (decision.execPolicyAmendment && decision.execPolicyAmendment.length > 0) {
+    throw new Error('execPolicyAmendment is only supported for Codex command approvals.');
+  }
+
+  if (decision.scope === 'session') {
     return 'acceptForSession';
   }
 
@@ -1208,7 +1342,8 @@ function normalizeQuestionAnswers(
 
   const normalized: ToolRequestUserInputResponse['answers'] = {};
   for (const question of request.questions) {
-    const answer = answers[question.id];
+    const answerKey = getQuestionLookupKeys(question).find((key) => answers[key] != null);
+    const answer = answerKey ? answers[answerKey] : undefined;
     if (answer == null) {
       throw new Error(`Missing answer for question: ${question.id}`);
     }

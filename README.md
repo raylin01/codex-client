@@ -45,7 +45,27 @@ await client.close();
 - `client.send(input, options?)` returns a turn handle immediately
 - `turn.current()`, `turn.history()`, `turn.updates()`, and `turn.done` expose normalized turn state
 - `client.getOpenRequests()` returns pending approvals, questions, and tool calls
+- `client.getOpenRequest(id)` returns one pending request by id
 - `client.approveRequest(...)`, `client.answerQuestion(...)`, and `client.respondToToolCall(...)` respond to Codex RPC requests without handling raw JSON-RPC directly
+- `client.createQuestionSession(id)` incrementally collects multi-question answers before `submit()`
+
+For approvals, the structured helper now only exposes Codex capabilities that actually exist in the app-server protocol:
+
+- `scope: 'once' | 'session'` for plain allow decisions
+- `execPolicyAmendment` for command approvals that should return `acceptWithExecpolicyAmendment`
+
+```ts
+const [request] = client.getOpenRequests();
+if (request?.kind === 'question') {
+  const session = client.createQuestionSession(request.id);
+
+  session.setCurrentAnswer('A');
+  session.next();
+  session.setCurrentAnswer(['B', 'C']);
+
+  await session.submit();
+}
+```
 
 ## Raw Transport API
 

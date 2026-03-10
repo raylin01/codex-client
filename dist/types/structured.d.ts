@@ -142,10 +142,33 @@ export interface CodexTurnUpdate {
     snapshot: CodexTurnSnapshot;
     kind: 'queued' | 'started' | 'output' | 'tool_use' | 'tool_result' | 'request' | 'completed' | 'error';
 }
+export type CodexApprovalScope = 'once' | 'session';
 export interface CodexApprovalDecision {
     behavior: 'allow' | 'deny';
-    scope?: 'once' | 'session' | 'always';
+    scope?: CodexApprovalScope;
     execPolicyAmendment?: string[] | null;
+}
+export interface CodexQuestionSessionSnapshot {
+    requestId: string;
+    request: CodexQuestionRequest;
+    currentIndex: number;
+    answers: Record<string, string | string[]>;
+}
+export declare class CodexQuestionSession {
+    private readonly client;
+    private readonly request;
+    private readonly answers;
+    private currentIndex;
+    constructor(client: StructuredCodexClient, request: CodexQuestionRequest);
+    get requestId(): string;
+    current(): CodexQuestionSessionSnapshot;
+    getCurrentQuestion(): CodexQuestionPrompt | null;
+    getAnswers(): Record<string, string | string[]>;
+    setAnswer(questionKey: string | number, answer: string | string[]): this;
+    setCurrentAnswer(answer: string | string[]): this;
+    next(): CodexQuestionPrompt | null;
+    previous(): CodexQuestionPrompt | null;
+    submit(): Promise<void>;
 }
 export declare class CodexTurnHandle extends EventEmitter {
     private snapshot;
@@ -194,6 +217,8 @@ export declare class StructuredCodexClient extends EventEmitter {
     getCurrentTurn(): CodexTurnSnapshot | null;
     getHistory(): CodexTurnSnapshot[];
     getOpenRequests(): CodexOpenRequest[];
+    getOpenRequest(requestId: string): CodexOpenRequest | null;
+    createQuestionSession(requestId: string): CodexQuestionSession;
     approveRequest(requestId: string, decision?: CodexApprovalDecision): Promise<void>;
     denyRequest(requestId: string, message?: string): Promise<void>;
     answerQuestion(requestId: string, answers: string | string[] | Record<string, string | string[]>): Promise<void>;

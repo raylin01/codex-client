@@ -222,3 +222,112 @@ test('structured client queues turns and answers question requests', async () =>
   const secondSnapshot = await second.done;
   assert.equal(secondSnapshot.status, 'completed');
 });
+
+test('structured client supports incremental codex question sessions', async () => {
+  const raw = new FakeCodexRawClient();
+  const client = StructuredCodexClient.fromRawClient(raw, 'thread-1');
+
+  client.send('ask a few things');
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  raw.emit('notification', {
+    method: 'turn/started',
+    params: { threadId: 'thread-1', turn: { id: 'remote-1' } }
+  });
+  raw.emit('request', {
+    id: 10,
+    method: 'item/tool/requestUserInput',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'remote-1',
+      itemId: 'ask-2',
+      questions: [
+        {
+          id: 'q1',
+          header: 'Primary',
+          question: 'Choose one',
+          isOther: false,
+          isSecret: false,
+          options: [{ label: 'A', description: 'first' }]
+        },
+        {
+          id: 'q2',
+          header: 'Secondary',
+          question: 'Choose many',
+          isOther: true,
+          isSecret: false,
+          options: [
+            { label: 'B', description: 'second' },
+            { label: 'C', description: 'third' }
+          ]
+        }
+      ]
+    }
+  });
+
+  const [question] = client.getOpenRequests();
+  const session = client.createQuestionSession(question.id);
+
+  assert.equal(session.getCurrentQuestion()?.id, 'q1');
+  session.setCurrentAnswer('A');
+  session.next();
+  session.setCurrentAnswer(['B', 'C']);
+
+  assert.deepEqual(session.current().answers, {
+    q1: 'A',
+    q2: ['B', 'C']
+  });
+
+  await session.submit();
+  assert.deepEqual(raw.responses[0], {
+    id: 10,
+    result: {
+      answers: {
+        q1: { answers: ['A'] },
+        q2: { answers: ['B', 'C'] }
+      }
+    }
+  });
+});
+
+test('structured client maps exec policy amendments without fake always scope', async () => {
+  const raw = new FakeCodexRawClient();
+  const client = StructuredCodexClient.fromRawClient(raw, 'thread-1');
+
+  client.send('Inspect command approval');
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  raw.emit('notification', {
+    method: 'turn/started',
+    params: { threadId: 'thread-1', turn: { id: 'remote-1' } }
+  });
+  raw.emit('request', {
+    id: 11,
+    method: 'item/commandExecution/requestApproval',
+    params: {
+      threadId: 'thread-1',
+      turnId: 'remote-1',
+      itemId: 'cmd-2',
+      command: 'pwd',
+      cwd: '/repo',
+      proposedExecPolicyAmendment: ['allow pwd']
+    }
+  });
+
+  const [request] = client.getOpenRequests();
+  await client.approveRequest(request.id, {
+    behavior: 'allow',
+    execPolicyAmendment: ['allow pwd']
+  });
+
+  assert.deepEqual(raw.responses[0], {
+    id: 11,
+    result: {
+      decision: {
+        acceptWithExecpolicyAmendment: {
+          execpolicy_amendment: ['allow pwd']
+        }
+      }
+    }
+  });
+});
